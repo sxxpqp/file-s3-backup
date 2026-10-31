@@ -51,8 +51,8 @@ func loadConfig() (config, error) {
 		}
 	}
 	u, err := url.Parse(os.Getenv("S3_ENDPOINT"))
-	if err != nil || u.Scheme != "https" || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-		return c, fmt.Errorf("S3_ENDPOINT must be an HTTPS service URL without bucket/path or credentials")
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return c, fmt.Errorf("S3_ENDPOINT 必须是 http:// 或 https:// 开头的 S3 接口地址，可带端口，不能包含桶名、路径、查询参数或登录凭据")
 	}
 	if strings.ContainsAny(c.bucket, "/\\: \t\r\n") || strings.HasPrefix(c.bucket, "-") {
 		return c, fmt.Errorf("invalid S3_BUCKET")

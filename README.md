@@ -50,6 +50,8 @@ BACKUP_DRY_RUN=true
 
 第二台主机使用 `S3_PREFIX=web-02/www/wwwroot`。区域按服务商要求填写。
 
+支持 HTTP 接口，例如 `S3_ENDPOINT=http://192.168.1.10:8080`，协议和端口会原样传给 AWS CLI；无需添加 `--no-verify-ssl`。修改 `.env` 后执行 `docker compose up -d --force-recreate` 生效。
+
 `.env` 使用标准 Compose 解析规则。密钥包含 `$`、`#` 等特殊字符时，用单引号包住整个值，例如 `AWS_SECRET_ACCESS_KEY='example$literal#secret'`；单引号不会传入容器。不要将 `docker compose config` 的完整输出发到聊天或日志中，其中可能含密钥；仅检查配置请使用 `docker compose config --quiet`。
 
 Compose 默认将宿主机 `/www/wwwroot` 只读挂载到容器 `/source`。若要更换源目录，修改 `compose.yaml` 的 bind source；`BACKUP_SOURCE` 填容器内路径。
@@ -100,7 +102,7 @@ docker compose up -d
 | 参数 | 默认值 / 说明 |
 | --- | --- |
 | `BACKUP_SOURCE` | `/source`，容器内绝对路径 |
-| `S3_ENDPOINT` | 必填，HTTPS S3 接口地址 |
+| `S3_ENDPOINT` | 必填，HTTP 或 HTTPS S3 接口地址，可带端口 |
 | `S3_BUCKET` | 必填，预先创建的桶 |
 | `S3_PREFIX` | 必填，每个实例独立前缀，不能指向桶根目录 |
 | `AWS_REGION` | `us-east-1`，按服务商要求配置 |

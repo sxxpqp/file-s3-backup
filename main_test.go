@@ -13,6 +13,7 @@ import (
 )
 
 func configEnv(t *testing.T) {
+	t.Setenv("BACKUP_SOURCE", t.TempDir())
 	t.Helper()
 	for k, v := range map[string]string{"S3_ENDPOINT": "https://s3.example.com", "S3_BUCKET": "backup", "S3_PREFIX": "web-01/www", "AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test", "BACKUP_DELETE": "false", "BACKUP_DRY_RUN": "false", "BACKUP_TIMEOUT": "2h"} {
 		t.Setenv(k, v)
@@ -184,5 +185,41 @@ func TestExecuteAWSExitAndCancellation(t *testing.T) {
 	defer cancel()
 	if err := executeAWS(ctx, []string{"-test.run=TestAWSHelperProcess", "--", "wait"}, io.Discard); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("timeout lost: %v", err)
+	}
+}
+
+func TestEndpointSchemes(t *testing.T) {
+	for _, endpoint := range []string{"http://192.168.1.10:8080", "http://s3.example.com/", "https://s3.example.com:9443"} {
+		t.Run(endpoint, func(t *testing.T) {
+			configEnv(t)
+			t.Setenv("S3_ENDPOINT", endpoint)
+			if _, err := loadConfig(); err != nil {
+				t.Fatalf("valid endpoint rejected: %v", err)
+			}
+			// Verify the selected protocol and port reach the CLI unchanged.
+			populatedSource(t)
+			t.Setenv("S3_ENDPOINT", endpoint)
+			err := runWithAWS(context.Background(), func(ctx context.Context, args []string, w io.Writer) error {
+				for i, arg := range args {
+					if arg == "--endpoint-url" && i+1 < len(args) && args[i+1] == endpoint {
+						return nil
+					}
+				}
+				t.Fatal("endpoint was not passed unchanged")
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	for _, endpoint := range []string{"ftp://s3.example.com", "s3.example.com", "http://s3.example.com/bucket", "http://user:secret@s3.example.com", "http://s3.example.com?key=value", "http://s3.example.com#fragment"} {
+		t.Run(endpoint, func(t *testing.T) {
+			configEnv(t)
+			t.Setenv("S3_ENDPOINT", endpoint)
+			if _, err := loadConfig(); err == nil {
+				t.Fatal("invalid endpoint accepted")
+			}
+		})
 	}
 }
