@@ -76,9 +76,16 @@ func loadConfig() (config, error) {
 }
 
 func sourceFiles(source string) ([]string, error) {
-	marker, err := os.Lstat(filepath.Join(source, ".s3-backup-source"))
-	if err != nil || !marker.Mode().IsRegular() {
-		return nil, fmt.Errorf("source marker missing: check source mount")
+	markerPath := filepath.Join(source, ".s3-backup-source")
+	marker, err := os.Lstat(markerPath)
+	if os.IsNotExist(err) {
+		return nil, fmt.Errorf("缺少备份源标记 %q，本轮未启动同步（不会上传或删除 S3 文件）。该空文件用于辅助确认源目录挂载正确。请先检查容器目录 %q 是否为真实备份数据；确认后，在对应宿主机目录或 PVC 中创建 .s3-backup-source。默认 Compose 映射为 /www/wwwroot → /source，确认使用该映射后执行：touch /www/wwwroot/.s3-backup-source。不要在启动脚本中自动创建标记；该标记不会上传到 S3", markerPath, source)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("无法检查备份源标记 %q，本轮未启动同步；请检查挂载和容器用户的目录访问权限：%w", markerPath, err)
+	}
+	if !marker.Mode().IsRegular() {
+		return nil, fmt.Errorf("备份源标记 %q 必须是普通文件，不能是目录或软链接；本轮未启动同步", markerPath)
 	}
 	var files []string
 	err = filepath.WalkDir(source, func(p string, d fs.DirEntry, err error) error {
@@ -139,7 +146,7 @@ func runWithAWS(ctx context.Context, aws awsRunner) error {
 		return err
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("source has no files; refusing backup")
+		return fmt.Errorf("备份源目录 %q 中没有可备份文件（标记文件不计入），本轮未启动同步；请检查挂载及源数据，防止将空目录同步到 S3", c.source)
 	}
 	base := []string{"--no-cli-pager", "--endpoint-url", os.Getenv("S3_ENDPOINT"), "--region", env("AWS_REGION", "us-east-1")}
 	if c.delete {

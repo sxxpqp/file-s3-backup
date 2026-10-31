@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,8 +33,19 @@ func TestConfigRejectsUnsafePrefixAndBoolean(t *testing.T) {
 	}
 }
 func TestMissingMountMarker(t *testing.T) {
-	if _, err := sourceFiles(t.TempDir()); err == nil {
+	source := t.TempDir()
+	_, err := sourceFiles(source)
+	if err == nil {
 		t.Fatal("accepted missing mount marker")
+	}
+	for _, text := range []string{filepath.Join(source, ".s3-backup-source"), "未启动同步", "touch /www/wwwroot/.s3-backup-source", "不要在启动脚本中自动创建"} {
+		// %q escapes Windows path separators; check the displayed quoted path separately.
+		if text == filepath.Join(source, ".s3-backup-source") {
+			text = strconv.Quote(text)
+		}
+		if !strings.Contains(err.Error(), text) {
+			t.Fatalf("missing operator guidance %q in %v", text, err)
+		}
 	}
 }
 func TestWalkCollectsFilesWithoutMarker(t *testing.T) {
