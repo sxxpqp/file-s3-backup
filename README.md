@@ -23,7 +23,7 @@
 
 ## Docker Compose 快速开始
 
-需要 Docker 和 **Docker Compose 2.30+**，配置使用 `env_file.format: raw`，避免密钥中的 `$` 被插值。镜像提供 linux/amd64；宿主机无需安装 Go、Python 或 AWS CLI。
+需要 Docker 和 Docker Compose v2。使用兼容写法 `env_file: [.env]`，不依赖 Compose 2.30 才引入的 `format: raw`。镜像提供 linux/amd64；宿主机无需安装 Go、Python 或 AWS CLI。
 
 ```bash
 git clone https://github.com/sxxpqp/file-s3-backup.git
@@ -49,6 +49,8 @@ BACKUP_DRY_RUN=true
 ```
 
 第二台主机使用 `S3_PREFIX=web-02/www/wwwroot`。区域按服务商要求填写。
+
+`.env` 使用标准 Compose 解析规则。密钥包含 `$`、`#` 等特殊字符时，用单引号包住整个值，例如 `AWS_SECRET_ACCESS_KEY='example$literal#secret'`；单引号不会传入容器。不要将 `docker compose config` 的完整输出发到聊天或日志中，其中可能含密钥；仅检查配置请使用 `docker compose config --quiet`。
 
 Compose 默认将宿主机 `/www/wwwroot` 只读挂载到容器 `/source`。若要更换源目录，修改 `compose.yaml` 的 bind source；`BACKUP_SOURCE` 填容器内路径。
 

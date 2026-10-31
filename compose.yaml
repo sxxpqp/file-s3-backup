@@ -3,8 +3,7 @@ services:
     image: ${BACKUP_IMAGE:-registry.cn-hangzhou.aliyuncs.com/sxxpqp/file-s3-backup:latest}
     pull_policy: always
     env_file:
-      - path: .env
-        format: raw
+      - .env
     restart: unless-stopped
     read_only: true
     security_opt: ["no-new-privileges:true"]
