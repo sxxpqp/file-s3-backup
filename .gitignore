@@ -1,0 +1,4 @@
+.env
+__pycache__/
+*.exe
+deploy/k8s/secret.yaml

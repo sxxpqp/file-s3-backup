@@ -1,0 +1,4 @@
+[default]
+s3 =
+    addressing_style = path
+    max_concurrent_requests = 4
