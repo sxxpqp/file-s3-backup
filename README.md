@@ -6,6 +6,8 @@
 
 **同步方向始终是本地 → S3，不会删除本地文件。** 源目录只读挂载。默认先预览，正式运行前需要修改配置。
 
+程序在启动 AWS CLI 前硬校验命令：只允许本地目录上传到独立 S3 前缀，以及查询桶版本状态；拒绝反向同步、移动、删除命令和额外 CLI 参数。没有允许删除源文件的配置项。Compose 和 Kubernetes 模板同时以只读方式挂载源目录；部署时必须保留该限制，提供操作系统层面的写入、删除保护。
+
 ## 工作方式
 
 ```text
@@ -36,7 +38,7 @@ vi .env
 至少填写以下参数。S3 接口地址不是管理后台地址，也不要带桶名或路径：
 
 ```dotenv
-S3_ENDPOINT=https://YOUR-XSKY-S3-ENDPOINT
+S3_ENDPOINT=http://YOUR-XSKY-S3-ENDPOINT
 S3_BUCKET=wishfoxs-web-backup
 S3_PREFIX=web-01/www/wwwroot
 AWS_REGION=us-east-1
@@ -200,7 +202,7 @@ RWO 卷可能要求备份 Pod 和业务 Pod 同节点，应按现网配置节点
 恢复到空目录，核对后再替换业务文件。通过安装了 AWS CLI 的恢复主机，使用独立的只读/恢复账号：
 
 ```bash
-aws --endpoint-url https://YOUR-S3-ENDPOINT s3 sync \
+aws --endpoint-url http://YOUR-S3-ENDPOINT s3 sync \
   s3://wishfoxs-web-backup/web-01/www/wwwroot/ /tmp/www-restore/
 ```
 

@@ -178,12 +178,12 @@ func TestExecuteAWSExitAndCancellation(t *testing.T) {
 	}
 	t.Setenv("AWS_CLI_BIN", binary)
 	t.Setenv("AWS_HELPER_PROCESS", "1")
-	if err := executeAWS(context.Background(), []string{"-test.run=TestAWSHelperProcess", "--", "fail"}, io.Discard); err == nil {
+	if err := executeProcess(context.Background(), []string{"-test.run=TestAWSHelperProcess", "--", "fail"}, io.Discard); err == nil {
 		t.Fatal("CLI exit failure lost")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	if err := executeAWS(ctx, []string{"-test.run=TestAWSHelperProcess", "--", "wait"}, io.Discard); !errors.Is(err, context.DeadlineExceeded) {
+	if err := executeProcess(ctx, []string{"-test.run=TestAWSHelperProcess", "--", "wait"}, io.Discard); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("timeout lost: %v", err)
 	}
 }
@@ -221,5 +221,50 @@ func TestEndpointSchemes(t *testing.T) {
 				t.Fatal("invalid endpoint accepted")
 			}
 		})
+	}
+}
+
+func TestBackupCommandsNeverTargetLocalFiles(t *testing.T) {
+	for _, deletion := range []string{"false", "true"} {
+		t.Run(deletion, func(t *testing.T) {
+			populatedSource(t)
+			t.Setenv("BACKUP_DELETE", deletion)
+			err := runWithAWS(context.Background(), func(_ context.Context, args []string, w io.Writer) error {
+				if err := validateBackupCommand(args); err != nil {
+					return err
+				}
+				if args[5] == "s3api" {
+					_, err := io.WriteString(w, `{"Status":"Enabled"}`)
+					return err
+				}
+				if args[7] != filepath.Clean(os.Getenv("BACKUP_SOURCE"))+string(os.PathSeparator) || args[8] != "s3://backup/web-01/www/" {
+					t.Fatalf("unsafe sync direction: %v", args)
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestExecuteAWSRejectsUnsafeCommandsBeforeStartingProcess(t *testing.T) {
+	// An invalid executable proves rejection happens before any child process starts.
+	t.Setenv("AWS_CLI_BIN", filepath.Join(t.TempDir(), "does-not-exist"))
+	base := []string{"--no-cli-pager", "--endpoint-url", "http://s3.example.com", "--region", "us-east-1"}
+	local := t.TempDir()
+	for _, command := range [][]string{
+		{"s3", "sync", "s3://backup/prefix/", local, "--delete"},
+		{"s3", "sync", local, local, "--delete"},
+		{"s3", "rm", local, "--recursive"},
+		{"s3", "mv", local, "s3://backup/prefix/", "--recursive"},
+		{"s3api", "delete-object", "--bucket", "backup", "--key", "file"},
+		{"s3", "sync", local, "s3://backup/prefix/", "--no-follow-symlinks", "--exclude", ".s3-backup-source", "--no-progress", "--endpoint-url", "http://other"},
+	} {
+		err := executeAWS(context.Background(), append(append([]string{}, base...), command...), io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "unsafe backup command") {
+			t.Fatalf("command %v was not blocked before execution: %v", command, err)
+		}
 	}
 }

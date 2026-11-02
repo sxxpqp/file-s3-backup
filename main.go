@@ -120,6 +120,40 @@ func sourceFiles(source string) ([]string, error) {
 type awsRunner func(context.Context, []string, io.Writer) error
 
 func executeAWS(ctx context.Context, args []string, output io.Writer) error {
+	if err := validateBackupCommand(args); err != nil {
+		return err
+	}
+	return executeProcess(ctx, args, output)
+}
+
+// Keep the CLI restricted to uploads and the read-only versioning check.
+// --delete on an upload sync affects only the S3 destination.
+func validateBackupCommand(args []string) error {
+	if len(args) < 7 || args[0] != "--no-cli-pager" || args[1] != "--endpoint-url" || args[3] != "--region" {
+		return fmt.Errorf("unsafe backup command: unsupported arguments")
+	}
+	if len(args) == 11 && args[5] == "s3api" && args[6] == "get-bucket-versioning" && args[7] == "--bucket" && args[9] == "--output" && args[10] == "json" {
+		return nil
+	}
+	if len(args) < 13 || args[5] != "s3" || args[6] != "sync" || !filepath.IsAbs(args[7]) || strings.HasPrefix(args[7], "s3://") {
+		return fmt.Errorf("unsafe backup command: only local-to-S3 sync is allowed; source files must never be deleted")
+	}
+	destination, err := url.Parse(args[8])
+	if err != nil || destination.Scheme != "s3" || destination.Host == "" || strings.Trim(destination.Path, "/") == "" || destination.User != nil || destination.RawQuery != "" || destination.Fragment != "" {
+		return fmt.Errorf("unsafe backup command: destination must be a dedicated S3 prefix")
+	}
+	if args[9] != "--no-follow-symlinks" || args[10] != "--exclude" || args[11] != ".s3-backup-source" || args[12] != "--no-progress" {
+		return fmt.Errorf("unsafe backup command: required protection flags are missing")
+	}
+	for _, arg := range args[13:] {
+		if arg != "--delete" && arg != "--dryrun" {
+			return fmt.Errorf("unsafe backup command: unsupported sync option %q", arg)
+		}
+	}
+	return nil
+}
+
+func executeProcess(ctx context.Context, args []string, output io.Writer) error {
 	cmd := exec.CommandContext(ctx, env("AWS_CLI_BIN", "aws"), args...)
 	cmd.Stdout = output
 	cmd.Stderr = os.Stderr
