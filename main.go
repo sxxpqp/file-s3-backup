@@ -96,7 +96,8 @@ func sourceFiles(source string) ([]string, error) {
 			return nil
 		}
 		if d.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("symlink unsupported: %s (no deletion performed)", p)
+			log.Printf("skipping source symlink: %q", p)
+			return nil
 		}
 		info, err := d.Info()
 		if err != nil {

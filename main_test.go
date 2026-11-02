@@ -64,6 +64,41 @@ func TestWalkCollectsFilesWithoutMarker(t *testing.T) {
 		t.Fatalf("unexpected files %v", files)
 	}
 }
+
+func TestSourceSymlinksDoNotBlockBackupOrFollowTargets(t *testing.T) {
+	populatedSource(t)
+	root := os.Getenv("BACKUP_SOURCE")
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "outside.txt"), []byte("outside"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for name, target := range map[string]string{
+		"storage":     outside,
+		"file-link":   filepath.Join(root, "test.txt"),
+		"broken-link": filepath.Join(outside, "missing"),
+	} {
+		if err := os.Symlink(target, filepath.Join(root, name)); err != nil {
+			t.Skipf("symlink creation unavailable: %v", err)
+		}
+	}
+	files, err := sourceFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "test.txt" {
+		t.Fatalf("unexpected source files: %v", files)
+	}
+	calls := 0
+	if err := runWithAWS(context.Background(), func(_ context.Context, args []string, _ io.Writer) error {
+		calls++
+		return validateBackupCommand(args)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected upload sync, calls=%d", calls)
+	}
+}
 func TestEmptySourceNeverDeletes(t *testing.T) {
 	configEnv(t)
 	root := t.TempDir()
